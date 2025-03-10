@@ -1,0 +1,76 @@
+{% if errorMessage %}
+<div class="alert alert-danger" role="alert">
+    {{ errorMessage }}</div>
+{% endif %}
+
+
+<script>
+    let reqcount = 0;
+    const maxAttempts = 15;
+    const CheckoutRequestID = "{{ checkout_request_id }}";
+    const statusContainer = document.getElementById("status-container");
+    const loadingSpinner = document.getElementById("loading-spinner");
+    const statusMessage = document.getElementById("status-message");
+    const retryButton = document.getElementById("retry-button");
+    const initialMessage = document.getElementById("initial-message");
+    const confirmText = document.getElementById("confirm-text");
+
+    const stkPushQuerywithintervals = ( checkout_request_id ) => {
+        const timer = setInterval(async() => {
+            reqcount += 1;
+            
+            try{
+                const response=await fetch("/stk_status/",{
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": "{{ csrf_token }}",
+                    },
+                    body: JSON.stringify({checkout_request_id:CheckoutRequestID}),
+                });
+                if (!response.ok) throw new Error("An error occurred while fetching status");
+
+                const data = await response.json();
+                console.log("Response:", data);
+
+
+                const resultCode = data.status.resultCode
+                const resultDesc = data.status.resultDesc || "payment failed. Please try again";
+
+                if (data.status.errorCode === "500.001.1001") {
+                    console.log("Payment is still being processed...");
+                }else if (resultCode === 0) {
+                    clearInterval(timer);
+                    loadingSpinner.style.display = "none";
+                    confirmText.style.display = "block";
+                    initialMessage.innerHTML = 'Payment successful <svg xmins="http://www.w3.org/2000/svg" fill="currentColor" class="bi bi-check-circle-fill" viewBox="0 0 16 16"> <path d="M8 0a8 8 0 0 1 5.657 2.343c1.757 1.757 2.683 4.29 2.683 6.914s-.926 5.157-2.683 6.914c-1.757 1.757-4.29 2.683-6.914 2.683s-5.157-.926-6.914-2.683C1.926 13.157 1 10.624 1 8s.926-5.157 2.683-6.914C2.843 0 5.376-.926 8-.926zm3.354 4.354a.5.5 0 0 0-.708-.708L7 9.293 5.354 7.646a.5.5 0 1 0-.708.708l2 2a.5.5 0 0 0 .708 0l4-4z"/> </svg>';
+                    statusMessage.innerHTML = '<div class="alert alert-success" role="alert"><p class="mt-2"> You payment has been completed! <a href = "{% url'payment' %}" class="btn btn-success">ok</a></div>';   
+                }else if (resultCode) {
+                    clearInterval(timer);
+                    loadingSpinner.style.display = "none";
+                    confirmText.style.display = "block";
+                    initialMessage.innerHTML = 'Payment failed <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="bi bi-x-circle-fill" viewBox="0 0 16 16"> <path d="M8 0a8 8 0 0 1 5.657 2.343c1.757 1.757 2.683 4.29 2.683 6.914s-.926 5.157-2.683 6.914c-1.757 1.757-4.29 2.683-6.914 2.683S2.926 13.157 1.169 11.4A8 8 0 0 1 8 0zm3.354 4.354a.5.5 0 0 0-.708-.708L8 7.293 4.354 3.646a.5.5 0 0 0-.708.708L7.293 8l-3.647 3.646a.5.5 0 0 0 .708.708L8 8.707l3.646 3.647a.5.5 0 0 0 .708-.708L8.707 8l3.647-3.646z"/> </svg>';
+                    statusMessage.innerHTML = '<div class="alert alert-danger" role="alert"><p class="mt-2"> ${resultDesc}</p> </div>';
+                    retryButton.style.display = "inner-block";
+                }                 
+            }   catch(error){
+                console.log("Error:", error);
+            }
+
+            if(reqcount>=maxAttempts){
+                clearInterval(timer);
+                loadingSpinner.style.display = "none";
+                statusMessage.innerHTML = '<div class="alert alert-danger" role="alert"><p class="mt-2"> Payment failed. Please try again. </div>';
+            }
+        },2000 );
+    }
+
+    retryButton.addEventListener("click", () =>{
+        reqcount = 0;
+        retryButton.style.display = "none";
+        loadingSpinner.style.display="inline-block";
+        statusMessage.textContent = "waiting for confirmation...";
+        stkPushQuerywithintervals(CheckoutRequestID)
+    });
+    stkPushQuerywithintervals(CheckoutRequestID);
+</script>
